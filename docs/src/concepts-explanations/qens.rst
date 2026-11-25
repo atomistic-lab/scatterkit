@@ -108,7 +108,7 @@ single :math:`F_s(q, t)` curve. This averaging recovers the isotropy that the di
 Rather than storing the full trajectory of phase factors and then correlating in a
 post-processing step, :class:`scatterkit.Qens` streams the per-atom phases
 :math:`e^{i \boldsymbol q \cdot \boldsymbol r_i(t)}` into a *multi-tau* correlator
-(:class:`maicos.lib.correlator.MultiTauCorrelator`). The multi-tau scheme uses
+(:class:`multitau.MultiTauCorrelator`). The multi-tau scheme uses
 geometrically spaced lag-time channels, so the function is sampled densely at short
 times and coarsely at long times while the memory cost stays bounded by the number of
 levels rather than by the trajectory length. This is the natural sampling for a

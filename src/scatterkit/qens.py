@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 #
 # Copyright (c) 2025 Authors and contributors
 # (see the AUTHORS.rst file for the full list of names)
@@ -9,8 +8,7 @@ r"""Module for computing the incoherent intermediate scattering function.
 
 Computes the self-part of the intermediate scattering function
 :math:`F_s(q, t)` via streaming multi-tau correlation provided by
-:class:`maicos.lib.correlator.MultiTauCorrelator` through the
-``_corr`` slot of :class:`maicos.core.AnalysisBase`.
+:class:`multitau.MultiTauCorrelator`.
 """
 
 import logging
@@ -19,6 +17,7 @@ import warnings
 import MDAnalysis as mda
 import numpy as np
 from maicos.core import AnalysisBase
+from multitau import MultiTauCorrelator
 
 from .lib.util import render_docs
 
@@ -118,10 +117,9 @@ class Qens(AnalysisBase):
         \right\rangle_{t_0}
 
     by streaming the per-atom phase factors
-    :math:`e^{i\boldsymbol{q}\cdot\boldsymbol{r}_i(t)}` into the multi-tau
-    correlator provided by :class:`maicos.core.AnalysisBase` via its
-    ``_corr`` slot. The trajectory is processed in a single pass with bounded
-    memory; lag times are logarithmically spaced.
+    :math:`e^{i\boldsymbol{q}\cdot\boldsymbol{r}_i(t)}` into a
+    :class:`multitau.MultiTauCorrelator`. The trajectory is processed in a
+    single pass with bounded memory; lag times are logarithmically spaced.
 
     For each q-shell, all q-vector orientations compatible with the simulation
     box are used and averaged (powder averaging). Requires an orthorhombic
@@ -135,9 +133,18 @@ class Qens(AnalysisBase):
         Maximum number of q-vectors per shell. If :py:obj:`None`, all
         lattice-compatible vectors in each shell are used. Default is 6:
         the powder-average variance budget is dominated by the per-atom
-        average ($\propto 1/N$), so once N is large adding more
+        average (:math:`\propto 1/N`), so once N is large adding more
         orientations gives rapidly diminishing returns while the
         correlator memory scales linearly with the total q-vector count.
+    correlator_num_levels : int
+        Number of coarsening levels :math:`p` of the multi-tau correlator.
+        The highest resolvable lag is :math:`(m-1) \cdot 2^{p-1}` frames,
+        where :math:`m` is ``correlator_channels_per_level``. Levels that
+        are never reached by the trajectory contribute no data.
+    correlator_channels_per_level : int
+        Number of channels :math:`m` per level of the multi-tau correlator.
+        Must be even. Level 0 holds all :math:`m` lags; higher levels hold
+        the upper half :math:`m/2 \dots m-1` to avoid redundancy.
     mem_warn_gb : float
         Threshold (in GB) for emitting a :class:`UserWarning` about the
         estimated peak memory of the streaming correlator. Defaults to
@@ -182,13 +189,13 @@ class Qens(AnalysisBase):
             jitter=jitter,
             concfreq=concfreq,
             wrap_compound="atoms",
-            correlator_num_levels=correlator_num_levels,
-            correlator_channels_per_level=correlator_channels_per_level,
         )
         self.qmin = qmin
         self.qmax = qmax
         self.dq = dq
         self.max_q_vectors = max_q_vectors
+        self.correlator_num_levels = correlator_num_levels
+        self.correlator_channels_per_level = correlator_channels_per_level
         self.mem_warn_gb = mem_warn_gb
         self.output = output
 
@@ -234,12 +241,23 @@ class Qens(AnalysisBase):
 
         self._check_memory_budget()
 
+        # Every (atom, q) pair gets its own autocorrelation, which is what
+        # makes this the self (incoherent) part of the scattering function.
+        self._correlator: MultiTauCorrelator | None = None
+        if len(self._all_q_vecs) > 0:
+            self._correlator = MultiTauCorrelator(
+                shape=(self.atomgroup.n_atoms, len(self._all_q_vecs)),
+                num_levels=self.correlator_num_levels,
+                channels_per_level=self.correlator_channels_per_level,
+                dtype=np.complex128,
+            )
+
     def _check_memory_budget(self) -> None:
         """Estimate streaming-correlator memory and warn if above threshold.
 
-        The :class:`maicos.lib.correlator.MultiTauCorrelator` holds a buffer and
-        an accumulator of shape ``(p, m, n_atoms, total_q)`` in complex128 (16
-        bytes/element). On read, ``self.correlation.phases`` materialises an
+        The :class:`multitau.MultiTauCorrelator` holds a buffer and an
+        accumulator of shape ``(p, m, n_atoms, total_q)`` in complex128 (16
+        bytes/element). On read, its ``correlation`` property materialises an
         additional ``(n_lags, n_atoms, total_q)`` array of the same dtype.
         """
         n_atoms = self.atomgroup.n_atoms
@@ -278,41 +296,40 @@ class Qens(AnalysisBase):
             )
 
     def _single_frame(self) -> float:
-        if len(self._all_q_vecs) == 0:
-            return 0.0
+        # There is no per-frame scalar observable; NaN makes MAICoS skip its
+        # correlation-time analysis instead of warning about zero variance.
+        if self._correlator is None:
+            return np.nan
 
         positions = self.atomgroup.positions  # (n_atoms, 3)
-        # phases[j, k] = exp(i q_k . r_j(t)). The base class correlates this
-        # element-wise, so every (atom, q) pair gets its own autocorrelation.
-        self._corr.phases = np.exp(1j * (positions @ self._all_q_vecs.T))
-        return 0.0
+        # phases[j, k] = exp(i q_k . r_j(t)), correlated element-wise.
+        self._correlator.add(np.exp(1j * (positions @ self._all_q_vecs.T)))
+        return np.nan
 
     def _conclude(self) -> None:
-        if (
-            not self._correlators
-            or "phases" not in self.correlation
-            or len(self.times) < 2
-        ):
+        if self._correlator is None or self._correlator.n_frames < 2:
             logging.warning("No correlation data collected.")
             self.results.lag_times = np.array([])
             self.results.q_values = np.array([])
             self.results.F_s = np.array([])
             return
 
-        # correlation.phases has shape (n_lags, n_atoms, total_q), complex.
-        # Mean over atoms then real part gives the per-q-vector F_s; we then
-        # powder-average within each shell.
-        per_q = self.correlation.phases.mean(axis=1).real
+        # The correlation has shape (n_lags, n_atoms, total_q), complex. Mean
+        # over atoms then real part gives the per-q-vector F_s; we then
+        # powder-average within each shell. Upper levels the trajectory never
+        # reached have no pairs (NaN) and are dropped.
+        valid = self._correlator.counts > 0
+        per_q = self._correlator.correlation.mean(axis=1).real[valid]
         n_shells = len(self._q_vectors_per_shell)
         F_s = np.zeros((n_shells, per_q.shape[0]))
         for i_shell in range(n_shells):
             F_s[i_shell] = per_q[:, self._shell_of_q == i_shell].mean(axis=1)
 
-        # self.lags arrives from MAiCoS in units of frame intervals; convert
-        # to physical time via the actually-sampled dt (which already reflects
-        # any user-supplied stride).
+        # Lags are in units of frame intervals; convert to physical time via
+        # the actually-sampled dt (which already reflects any user-supplied
+        # stride).
         dt = float(self.times[1] - self.times[0])
-        self.results.lag_times = self.lags * dt
+        self.results.lag_times = self._correlator.lags[valid] * dt
         self.results.q_values = self._q_bin_values
         self.results.F_s = F_s
 

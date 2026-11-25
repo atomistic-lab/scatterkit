@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 #
 # Copyright (c) 2025 Authors and contributors
 # (see the AUTHORS.rst file for the full list of names)
@@ -7,12 +6,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Tests for the QENS module.
 
-Multi-tau correlator behaviour is covered by MAiCoS's own test suite
-(``tests/lib/test_correlator.py``); this file exercises only the scatterkit
+Multi-tau correlator behaviour is covered by multitau's own test suite
+(``tests/test_correlator.py``); this file exercises only the scatterkit
 ``Qens`` wrapper.
 """
 
 import sys
+import warnings
 from pathlib import Path
 
 import MDAnalysis as mda
@@ -82,8 +82,8 @@ class TestQens:
         data = np.loadtxt("fs.dat")
         assert data.shape[0] == len(qens.results.lag_times)
 
-    def test_f_s_at_t0_near_one(self, ag_water_npt):
-        """F_s(q, t=0) should be close to 1 (self-correlation at zero lag)."""
+    def test_f_s_at_t0_is_one(self, ag_water_npt):
+        """F_s(q, t=0) is exactly 1 since |exp(i q.r)|^2 = 1."""
         qens = Qens(
             ag_water_npt,
             qmin=0.5,
@@ -93,20 +93,55 @@ class TestQens:
             correlator_channels_per_level=8,
         ).run()
 
-        # The smallest lag is dt (not exactly 0), so F_s won't be exactly 1,
-        # but for small q it should be close. Use a generous tolerance since
-        # the trajectory is short and the smallest lag may already show decay.
-        assert_allclose(qens.results.F_s[:, 0], 1.0, atol=0.35)
+        assert qens.results.lag_times[0] == 0
+        assert_allclose(qens.results.F_s[:, 0], 1.0, rtol=1e-12)
 
-    def test_deterministic_reproducibility(self, ag_water_npt):
-        """Same parameters should give identical results (deterministic q-vectors)."""
-        kwargs = dict(
+    def test_matches_direct_computation(self, ag_water_npt):
+        """Level-0 lags equal a direct average over all time origins."""
+        m = 8
+        qens = Qens(
+            ag_water_npt,
             qmin=0.5,
             qmax=1.5,
             dq=0.5,
             correlator_num_levels=4,
-            correlator_channels_per_level=8,
-        )
+            correlator_channels_per_level=m,
+        ).run()
+
+        positions = np.array([ag_water_npt.positions for _ in qens._trajectory])
+        phases = np.exp(1j * (positions @ qens._all_q_vecs.T))  # (n_t, n_atoms, n_q)
+        expected = np.zeros((len(qens.results.q_values), m))
+        for lag in range(m):
+            corr = np.conj(phases[: len(phases) - lag]) * phases[lag:]
+            per_q = corr.mean(axis=(0, 1)).real
+            for i_shell in range(len(qens.results.q_values)):
+                expected[i_shell, lag] = per_q[qens._shell_of_q == i_shell].mean()
+
+        assert_allclose(qens.results.F_s[:, :m], expected, rtol=1e-12)
+        assert_allclose(qens.results.lag_times[:m], np.arange(m) * qens._trajectory.dt)
+
+    def test_no_warnings(self, ag_water_npt):
+        """A regular run must not emit (e.g. correlation-time) warnings."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            Qens(
+                ag_water_npt,
+                qmin=0.5,
+                qmax=1.5,
+                dq=0.5,
+                correlator_num_levels=4,
+                correlator_channels_per_level=8,
+            ).run()
+
+    def test_deterministic_reproducibility(self, ag_water_npt):
+        """Same parameters should give identical results (deterministic q-vectors)."""
+        kwargs = {
+            "qmin": 0.5,
+            "qmax": 1.5,
+            "dq": 0.5,
+            "correlator_num_levels": 4,
+            "correlator_channels_per_level": 8,
+        }
         qens1 = Qens(ag_water_npt, **kwargs).run()
         qens2 = Qens(ag_water_npt, **kwargs).run()
 
