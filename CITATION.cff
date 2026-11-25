@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use scatterkit in your work, please cite it as below."
+type: software
+title: scatterkit
+abstract: SAXS analysis of molecular dynamics simulations.
+authors:
+  - family-names: Fischer
+    given-names: Kira
+  - family-names: Loche
+    given-names: Philip
+  - family-names: Schlaich
+    given-names: Alexander
+  - family-names: Stooß
+    given-names: Henrik
+repository-code: "https://github.com/atomistic-lab/scatterkit"
+license: GPL-3.0-or-later
+keywords:
+  - molecular dynamics
+  - small-angle X-ray scattering
+  - SAXS
+  - structure factor
+  - MDAnalysis

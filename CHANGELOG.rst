@@ -9,12 +9,13 @@ CHANGELOG file
   - keep the format consistent (88 char width, Y/M/D date format) and do not
     use tabs but use spaces for formatting
 
-v0.1.2 (2026/11/10)
+v0.1.2 (2026/11/25)
 -------------------
 Henrik Stooß
 
 - Update GitHub URLs for the org rename ``maicos-devel`` -> ``atomistic-lab`` (#111)
 - Add the GPL-3.0 ``LICENSE`` file
+- Add a ``CITATION.cff`` file for GitHub's citation button and Zenodo
 - Fix ``DiporderStructureFactor`` for MAICoS 0.13, which renamed the ``cos_theta`` order
   parameter to ``P1``, and require ``maicos>=0.13``
 - Align infrastructure with MAICoS 0.13: require ``MDAnalysisTests>=2.10.0``, use
