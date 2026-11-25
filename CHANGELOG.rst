@@ -9,6 +9,12 @@ CHANGELOG file
   - keep the format consistent (88 char width, Y/M/D date format) and do not
     use tabs but use spaces for formatting
 
+Unreleased
+----------
+Henrik Stooß
+
+- Add QENS module (#22)
+
 v0.1.2 (2026/11/25)
 -------------------
 Henrik Stooß

@@ -6,7 +6,8 @@ __authors__ = "MAICoS Developer Team"
 #: and `semantic versioning <http://semver.org/>`_.
 from ._version import __version__  # noqa: F401
 from .diporderstructurefactor import DiporderStructureFactor
+from .qens import Qens
 from .rdfdiporder import RDFDiporder
 from .saxs import Saxs
 
-__all__ = ["DiporderStructureFactor", "RDFDiporder", "Saxs"]
+__all__ = ["DiporderStructureFactor", "Qens", "RDFDiporder", "Saxs"]
