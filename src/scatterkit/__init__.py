@@ -10,4 +10,4 @@ from .qens import Qens
 from .rdfdiporder import RDFDiporder
 from .saxs import Saxs
 
-__all__ = ["Saxs", "DiporderStructureFactor", "RDFDiporder", "Qens"]
+__all__ = ["DiporderStructureFactor", "Qens", "RDFDiporder", "Saxs"]

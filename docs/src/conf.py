@@ -12,12 +12,11 @@ This file does only contain a selection of the most common options. For a full l
 the documentation: http://www.sphinx-doc.org/en/master/config
 """
 
-from datetime import datetime
+import tomllib
+from datetime import UTC, datetime
 from pathlib import Path
 
 # -- Path setup --------------------------------------------------------------
-import tomli
-
 import scatterkit
 
 ROOT = Path("../../")
@@ -25,12 +24,12 @@ ROOT = Path("../../")
 # -- Project information -----------------------------------------------------
 
 with Path(ROOT / "pyproject.toml").open(mode="rb") as fp:
-    project_dict = tomli.load(fp)["project"]
+    project_dict = tomllib.load(fp)["project"]
 
 project = project_dict["name"]
 author = scatterkit.__authors__
 version = scatterkit.__version__
-copyright = f"{datetime.now().date().year}, {author}"
+copyright = f"{datetime.now(tz=UTC).year}, {author}"
 
 # -- General configuration ---------------------------------------------------
 
@@ -116,9 +115,9 @@ html_theme_options = {
 
 # font-awesome logos
 html_css_files = [
-    "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/fontawesome.min.css",  # noqa: E501
-    "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/solid.min.css",  # noqa: E501
-    "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/brands.min.css",  # noqa: E501
+    "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/fontawesome.min.css",
+    "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/solid.min.css",
+    "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/brands.min.css",
 ]
 
 # -- Options for HTMLHelp output ---------------------------------------------

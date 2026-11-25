@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 #
 # Copyright (c) 2025 Authors and contributors
 # (see the AUTHORS.rst file for the full list of names)
@@ -115,7 +114,7 @@ class DiporderStructureFactor(AnalysisBase):
             weights = diporder_weights(
                 atomgroup=self.atomgroup,
                 grouping=self.wrap_compound,
-                order_parameter="cos_theta",
+                order_parameter="P1",
                 get_unit_vectors=get_unit_vectors,
             )
 
@@ -136,11 +135,11 @@ class DiporderStructureFactor(AnalysisBase):
             scattering_vectors = scattering_vectors[nonzeros]
             structure_factors = structure_factors[nonzeros]
 
-            histogram_kwargs = dict(
-                a=scattering_vectors,
-                bins=self.n_bins,
-                range=(self.qmin, self.qmax),
-            )
+            histogram_kwargs = {
+                "a": scattering_vectors,
+                "bins": self.n_bins,
+                "range": (self.qmin, self.qmax),
+            }
             structure_factors_binned, _ = np.histogram(
                 weights=structure_factors, **histogram_kwargs
             )
